@@ -1,23 +1,18 @@
 import { useState } from 'react'
 import { LEAD_SOURCES, LEAD_STATUSES } from '../data/leads.js'
 
-// Today's date in the YYYY-MM-DD format that <input type="date"> expects
-function today() {
-  const now = new Date()
-  const month = String(now.getMonth() + 1).padStart(2, '0')
-  const day = String(now.getDate()).padStart(2, '0')
-  return `${now.getFullYear()}-${month}-${day}`
-}
-
-const EMPTY_LEAD = {
-  name: '',
-  company: '',
-  email: '',
-  phone: '',
-  source: '',
-  status: 'New',
-  notes: '',
-  createdDate: '',
+// The form's starting values. Inputs need strings, but the backend can return null
+// for company and phone, and it stores value as a number.
+function getInitialValues(lead) {
+  return {
+    name: lead?.name ?? '',
+    company: lead?.company ?? '',
+    email: lead?.email ?? '',
+    phone: lead?.phone ?? '',
+    source: lead?.source ?? '',
+    status: lead?.status ?? 'new',
+    value: lead ? String(lead.value) : '',
+  }
 }
 
 // Check each field and return an object of error messages (empty object = valid)
@@ -40,16 +35,21 @@ function validate(values) {
 
   if (!values.source) errors.source = 'Please choose a lead source.'
   if (!values.status) errors.status = 'Please choose a lead status.'
-  if (!values.createdDate) errors.createdDate = 'Created date is required.'
+  if (Number(values.value) < 0 || Number.isNaN(Number(values.value))) {
+    errors.value = 'Value must be zero or more.'
+  }
   return errors
 }
 
 // Pop-up form used for both adding and editing a lead.
 // If `lead` is given we are editing; otherwise we are adding a new one.
+// `onSave` returns a promise, which rejects with { message, details } if the server says no.
 function LeadForm({ lead, onSave, onCancel }) {
   const isEditing = Boolean(lead)
-  const [values, setValues] = useState(lead || { ...EMPTY_LEAD, createdDate: today() })
+  const [values, setValues] = useState(() => getInitialValues(lead))
   const [errors, setErrors] = useState({})
+  const [formError, setFormError] = useState('')
+  const [isSaving, setIsSaving] = useState(false)
 
   function handleChange(event) {
     const { name, value } = event.target
@@ -58,21 +58,33 @@ function LeadForm({ lead, onSave, onCancel }) {
     if (errors[name]) setErrors((previous) => ({ ...previous, [name]: undefined }))
   }
 
-  function handleSubmit(event) {
+  async function handleSubmit(event) {
     event.preventDefault()
     const foundErrors = validate(values)
     if (Object.keys(foundErrors).length > 0) {
       setErrors(foundErrors)
       return
     }
-    onSave({
-      ...values,
-      name: values.name.trim(),
-      company: values.company.trim(),
-      email: values.email.trim(),
-      phone: values.phone.trim(),
-      notes: values.notes.trim(),
-    })
+
+    setIsSaving(true)
+    setFormError('')
+    try {
+      await onSave({
+        ...values,
+        name: values.name.trim(),
+        company: values.company.trim(),
+        email: values.email.trim(),
+        phone: values.phone.trim(),
+        value: Number(values.value),
+      })
+    } catch (error) {
+      // Show validation errors next to their fields, and anything else (like a
+      // duplicate email or the server being down) above the buttons
+      if (error.details) setErrors(error.details)
+      else setFormError(error.message)
+    } finally {
+      setIsSaving(false)
+    }
   }
 
   // Small helper so every field renders its label and error the same way.
@@ -80,7 +92,7 @@ function LeadForm({ lead, onSave, onCancel }) {
   // defined inside another component is re-created on each render and inputs would lose focus.
   function Field({ label, name, required, children }) {
     return (
-      <div className={`form-field ${name === 'notes' ? 'form-field--full' : ''}`}>
+      <div className="form-field">
         <label htmlFor={name}>
           {label} {required && <span className="required">*</span>}
         </label>
@@ -124,7 +136,7 @@ function LeadForm({ lead, onSave, onCancel }) {
               children: (
                 <select id="source" name="source" className={inputClass('source')} value={values.source} onChange={handleChange}>
                   <option value="">Select source</option>
-                  {LEAD_SOURCES.map((source) => <option key={source} value={source}>{source}</option>)}
+                  {LEAD_SOURCES.map((source) => <option key={source.value} value={source.value}>{source.label}</option>)}
                 </select>
               ),
             })}
@@ -132,23 +144,23 @@ function LeadForm({ lead, onSave, onCancel }) {
               label: 'Lead Status', name: 'status', required: true,
               children: (
                 <select id="status" name="status" className={inputClass('status')} value={values.status} onChange={handleChange}>
-                  {LEAD_STATUSES.map((status) => <option key={status} value={status}>{status}</option>)}
+                  {LEAD_STATUSES.map((status) => <option key={status.value} value={status.value}>{status.label}</option>)}
                 </select>
               ),
             })}
             {Field({
-              label: 'Created Date', name: 'createdDate', required: true,
-              children: <input id="createdDate" name="createdDate" type="date" className={inputClass('createdDate')} value={values.createdDate} onChange={handleChange} />,
-            })}
-            {Field({
-              label: 'Notes', name: 'notes',
-              children: <textarea id="notes" name="notes" rows="3" className="input" value={values.notes} onChange={handleChange} placeholder="Any extra details about this lead..." />,
+              label: 'Value', name: 'value',
+              children: <input id="value" name="value" type="number" min="0" className={inputClass('value')} value={values.value} onChange={handleChange} placeholder="e.g. 5000" />,
             })}
           </div>
 
+          {formError && <p className="alert alert--form">{formError}</p>}
+
           <div className="modal__footer">
             <button type="button" className="btn btn--secondary" onClick={onCancel}>Cancel</button>
-            <button type="submit" className="btn btn--primary">{isEditing ? 'Save Changes' : 'Add Lead'}</button>
+            <button type="submit" className="btn btn--primary" disabled={isSaving}>
+              {isSaving ? 'Saving...' : isEditing ? 'Save Changes' : 'Add Lead'}
+            </button>
           </div>
         </form>
       </div>

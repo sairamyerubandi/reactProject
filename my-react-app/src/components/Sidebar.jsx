@@ -5,7 +5,7 @@ const MENU_ITEMS = [
 ]
 
 // Left-hand navigation. On mobile it slides in when `isOpen` is true.
-function Sidebar({ activePage, onNavigate, isOpen, onClose }) {
+function Sidebar({ activePage, onNavigate, isOpen, onClose, onLogout }) {
   return (
     <>
       {/* Dark overlay behind the sidebar on mobile; clicking it closes the menu */}
@@ -30,7 +30,12 @@ function Sidebar({ activePage, onNavigate, isOpen, onClose }) {
           ))}
         </nav>
 
-        <p className="sidebar__footer">Data is saved in your browser</p>
+        <button className="sidebar__link sidebar__logout" onClick={onLogout}>
+          <span className="sidebar__icon">🚪</span>
+          Log Out
+        </button>
+
+        <p className="sidebar__footer">Data is saved on the server</p>
       </aside>
     </>
   )

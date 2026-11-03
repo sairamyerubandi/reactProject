@@ -1,3 +1,5 @@
+@import "tailwindcss";
+
 /* ===== Colors and base styles ===== */
 :root {
   --primary: #4f46e5;
@@ -29,6 +31,42 @@ body {
 h1,
 h2 {
   margin: 0;
+}
+
+/* ===== Login page ===== */
+.login {
+  display: grid;
+  place-items: center;
+  min-height: 100vh;
+  padding: 16px;
+}
+
+.login__card {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  width: 100%;
+  max-width: 380px;
+  padding: 28px;
+  background: var(--card-bg);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+}
+
+.login__brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 1.15rem;
+  font-weight: 700;
+}
+
+.login__brand .sidebar__logo {
+  color: #fff;
+}
+
+.login__submit {
+  width: 100%;
 }
 
 /* ===== Page layout ===== */
@@ -115,8 +153,12 @@ h2 {
   color: #fff;
 }
 
-.sidebar__footer {
+.sidebar__logout {
   margin-top: auto;
+}
+
+.sidebar__footer {
+  margin: 12px 0 0;
   padding: 0 8px;
   font-size: 0.75rem;
   color: var(--sidebar-text);
@@ -245,7 +287,7 @@ h2 {
 .card--total { --card-color: #4f46e5; --card-tint: #eef2ff; }
 .card--new { --card-color: #2563eb; --card-tint: #dbeafe; }
 .card--contacted { --card-color: #d97706; --card-tint: #fef3c7; }
-.card--converted { --card-color: #16a34a; --card-tint: #dcfce7; }
+.card--won { --card-color: #16a34a; --card-tint: #dcfce7; }
 
 /* ===== Panels (white boxes) ===== */
 .panel {
@@ -277,7 +319,7 @@ h2 {
   flex: 1;
 }
 
-.search-filter__status {
+.search-filter .search-filter__status {
   width: 200px;
 }
 
@@ -357,8 +399,55 @@ h2 {
 .badge--new { background: #dbeafe; color: #1d4ed8; }
 .badge--contacted { background: #fef3c7; color: #b45309; }
 .badge--qualified { background: #ede9fe; color: #6d28d9; }
-.badge--converted { background: #dcfce7; color: #15803d; }
+.badge--proposal { background: #cffafe; color: #0e7490; }
+.badge--won { background: #dcfce7; color: #15803d; }
 .badge--lost { background: #fee2e2; color: #b91c1c; }
+
+/* ===== Error messages ===== */
+.alert {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin: 0;
+  padding: 12px 16px;
+  border-radius: 8px;
+  background: #fef2f2;
+  color: #b91c1c;
+  font-size: 0.9rem;
+}
+
+.alert--panel {
+  margin-bottom: 16px;
+}
+
+.alert--form {
+  margin-top: 16px;
+}
+
+.muted-text {
+  color: var(--text-muted);
+  font-size: 0.9rem;
+}
+
+/* ===== Pagination ===== */
+.pagination {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.pagination__info {
+  color: var(--text-muted);
+  font-size: 0.85rem;
+}
+
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
 
 /* ===== Empty state ===== */
 .empty-state {
@@ -439,10 +528,6 @@ h2 {
   font-weight: 600;
 }
 
-.form-field--full {
-  grid-column: 1 / -1;
-}
-
 .form-field__error {
   margin: 4px 0 0;
   font-size: 0.8rem;
@@ -455,6 +540,81 @@ h2 {
 
 textarea.input {
   resize: vertical;
+}
+
+/* ===== Lead details pop-up ===== */
+.modal__body {
+  padding: 20px 24px;
+}
+
+.details-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin: 0;
+}
+
+.details-grid dt {
+  margin-bottom: 4px;
+  color: var(--text-muted);
+  font-size: 0.8rem;
+}
+
+.details-grid dd {
+  margin: 0;
+  font-size: 0.9rem;
+  overflow-wrap: anywhere;
+}
+
+.notes-title {
+  margin: 24px 0 12px;
+  font-size: 1rem;
+}
+
+.modal .note-form {
+  padding: 0;
+}
+
+.note-form {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.note-form .form-field__error {
+  align-self: flex-start;
+  margin: 0;
+}
+
+.notes-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.note {
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: #f9fafb;
+  border: 1px solid var(--border);
+}
+
+.note__body {
+  margin: 0;
+  font-size: 0.9rem;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.note__date {
+  margin: 6px 0 0;
+  color: var(--text-muted);
+  font-size: 0.75rem;
 }
 
 /* ===== Tablet ===== */
@@ -507,11 +667,12 @@ textarea.input {
     flex-direction: column;
   }
 
-  .search-filter__status {
+  .search-filter .search-filter__status {
     width: 100%;
   }
 
-  .form-grid {
+  .form-grid,
+  .details-grid {
     grid-template-columns: 1fr;
   }
 

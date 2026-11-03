@@ -1,46 +1,73 @@
 import { useState, useEffect } from 'react'
+import { useDispatch, useSelector } from 'react-redux'
 import Sidebar from './components/Sidebar.jsx'
 import DashboardCards from './components/DashboardCards.jsx'
+import LeadDetails from './components/LeadDetails.jsx'
 import LeadForm from './components/LeadForm.jsx'
 import LeadTable from './components/LeadTable.jsx'
+import Pagination from './components/Pagination.jsx'
 import SearchFilter from './components/SearchFilter.jsx'
-import { SAMPLE_LEADS } from './data/leads.js'
-
-// The key we use to save leads in the browser's localStorage
-const STORAGE_KEY = 'lead-management-leads'
+import { logOut } from './store/authSlice.js'
+import {
+  createLead,
+  deleteLead,
+  fetchLeads,
+  fetchLeadStats,
+  fetchRecentLeads,
+  setPage,
+  setSearchText,
+  setStatusFilter,
+  updateLead,
+} from './store/leadsSlice.js'
+import Users from './components/usersScreen.jsx'
+// import Users from './components/usersScreen.js'
 
 const PAGE_TITLES = {
   dashboard: 'Dashboard',
   leads: 'Lead Managements',
+  users:'user management'
 }
 
-// Read saved leads from localStorage. The first time, use the sample leads.
-function loadLeads() {
-  try {
-    const savedLeads = localStorage.getItem(STORAGE_KEY)
-    return savedLeads ? JSON.parse(savedLeads) : SAMPLE_LEADS
-  } catch {
-    // If the saved data is broken, start with the sample leads instead of crashing
-    return SAMPLE_LEADS
-  }
-}
+// Wait this long after the last change before asking the server, so that
+// typing in the search box doesn't send one request per letter
+const SEARCH_DELAY_MS = 300
 
 function App() {
-  // Passing a function to useState means loadLeads runs only once, on first render
-  const [leads, setLeads] = useState(loadLeads)
+  const dispatch = useDispatch()
+  const {
+    items: leads,
+    pagination,
+    filters,
+    isLoading,
+    error,
+    recentLeads,
+    isRecentLoading,
+    recentError,
+    stats,
+    statsError,
+  } = useSelector((state) => state.leads)
+
   const [activePage, setActivePage] = useState('dashboard')
   const [isSidebarOpen, setIsSidebarOpen] = useState(false)
-  const [searchText, setSearchText] = useState('')
-  const [statusFilter, setStatusFilter] = useState('All')
 
   // Form state: isFormOpen shows the pop-up, editingLead is null when adding a new lead
   const [isFormOpen, setIsFormOpen] = useState(false)
   const [editingLead, setEditingLead] = useState(null)
 
-  // Every time the leads change, save them to localStorage
+  // The id of the lead shown in the details pop-up (null when it is closed)
+  const [viewingLeadId, setViewingLeadId] = useState(null)
+
+  // Load the dashboard data once when the app opens
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(leads))
-  }, [leads])
+    dispatch(fetchLeadStats())
+    dispatch(fetchRecentLeads())
+  }, [dispatch])
+
+  // Load the leads table on open, and again whenever the search, filter, or page changes
+  useEffect(() => {
+    const timer = setTimeout(() => dispatch(fetchLeads()), SEARCH_DELAY_MS)
+    return () => clearTimeout(timer)
+  }, [dispatch, filters.searchText, filters.status, filters.page])
 
   function navigate(page) {
     setActivePage(page)
@@ -62,40 +89,39 @@ function App() {
     setEditingLead(null)
   }
 
-  function saveLead(leadData) {
+  // unwrap() makes a failed request throw, so the form can show the error and stay open
+  async function saveLead(leadData) {
     if (editingLead) {
-      // Replace the old lead with the updated one
-      setLeads((previousLeads) =>
-        previousLeads.map((lead) => (lead.id === editingLead.id ? { ...leadData, id: lead.id } : lead)),
-      )
+      await dispatch(updateLead({ id: editingLead.id, changes: leadData })).unwrap()
     } else {
-      // Put the new lead at the top of the list
-      setLeads((previousLeads) => [{ ...leadData, id: crypto.randomUUID() }, ...previousLeads])
+      await dispatch(createLead(leadData)).unwrap()
     }
     closeForm()
   }
 
-  function deleteLead(lead) {
-    if (window.confirm(`Are you sure you want to delete "${lead.name}"? This cannot be undone.`)) {
-      setLeads((previousLeads) => previousLeads.filter((item) => item.id !== lead.id))
+  async function removeLead(lead) {
+    if (!window.confirm(`Are you sure you want to delete "${lead.name}"? This cannot be undone.`)) return
+    try {
+      await dispatch(deleteLead(lead.id)).unwrap()
+    } catch (deleteError) {
+      window.alert(`Could not delete "${lead.name}". ${deleteError.message}`)
     }
   }
 
-  // Apply the search text and status filter
-  const search = searchText.trim().toLowerCase()
-  const filteredLeads = leads.filter((lead) => {
-    const matchesSearch =
-      lead.name.toLowerCase().includes(search) ||
-      lead.email.toLowerCase().includes(search) ||
-      lead.phone.toLowerCase().includes(search)
-    const matchesStatus = statusFilter === 'All' || lead.status === statusFilter
-    return matchesSearch && matchesStatus
-  })
+  function getLeadsEmptyMessage() {
+    if (isLoading) return 'Loading leads...'
+    if (error) return 'Leads could not be loaded.'
+    if (filters.searchText.trim() || filters.status !== 'All') return 'No leads match your search or filter.'
+    return 'No leads yet. Click "+ Add Lead" to create your first one.'
+  }
 
-  // Newest five leads for the dashboard
-  const recentLeads = [...leads]
-    .sort((a, b) => b.createdDate.localeCompare(a.createdDate))
-    .slice(0, 5)
+  function getRecentEmptyMessage() {
+    if (isRecentLoading) return 'Loading leads...'
+    if (recentError) return 'Leads could not be loaded.'
+    return 'No leads yet. Click "+ Add Lead" to create your first one.'
+  }
+
+  const dashboardError = statsError || recentError
 
   return (
     <div className="layout">
@@ -104,6 +130,7 @@ function App() {
         onNavigate={navigate}
         isOpen={isSidebarOpen}
         onClose={() => setIsSidebarOpen(false)}
+        onLogout={() => dispatch(logOut())}
       />
 
       <div className="main">
@@ -120,7 +147,21 @@ function App() {
         <main className="content">
           {activePage === 'dashboard' && (
             <>
-              <DashboardCards leads={leads} />
+              {dashboardError && (
+                <div className="alert">
+                  <span>{dashboardError}</span>
+                  <button
+                    className="btn btn--small btn--danger"
+                    onClick={() => {
+                      dispatch(fetchLeadStats())
+                      dispatch(fetchRecentLeads())
+                    }}
+                  >
+                    Retry
+                  </button>
+                </div>
+              )}
+              <DashboardCards stats={stats} />
               <section className="panel">
                 <div className="panel__header">
                   <h2>Recent Leads</h2>
@@ -128,35 +169,47 @@ function App() {
                     View all →
                   </button>
                 </div>
-                <LeadTable
-                  leads={recentLeads}
-                  showActions={false}
-                  emptyMessage='No leads yet. Click "+ Add Lead" to create your first one.'
-                />
+                <LeadTable leads={recentLeads} showActions={false} emptyMessage={getRecentEmptyMessage()} />
               </section>
             </>
+          )}
+          {activePage==='users' && (
+            <div>
+              <Users stats={stats}/>
+              {/* <P>Sairam Yerubandi</P> */}
+            </div>
           )}
 
           {activePage === 'leads' && (
             <section className="panel">
               <div className="panel__header">
-                <h2>All Leads ({filteredLeads.length})</h2>
+                <h2>All Leads ({pagination.total})</h2>
               </div>
               <SearchFilter
-                searchText={searchText}
-                onSearchChange={setSearchText}
-                statusFilter={statusFilter}
-                onStatusChange={setStatusFilter}
+                searchText={filters.searchText}
+                onSearchChange={(text) => dispatch(setSearchText(text))}
+                statusFilter={filters.status}
+                onStatusChange={(status) => dispatch(setStatusFilter(status))}
               />
+              {error && (
+                <div className="alert alert--panel">
+                  <span>{error}</span>
+                  <button className="btn btn--small btn--danger" onClick={() => dispatch(fetchLeads())}>
+                    Retry
+                  </button>
+                </div>
+              )}
               <LeadTable
-                leads={filteredLeads}
+                leads={leads}
+                onView={(lead) => setViewingLeadId(lead.id)}
                 onEdit={openEditForm}
-                onDelete={deleteLead}
-                emptyMessage={
-                  leads.length === 0
-                    ? 'No leads yet. Click "+ Add Lead" to create your first one.'
-                    : 'No leads match your search or filter.'
-                }
+                onDelete={removeLead}
+                emptyMessage={getLeadsEmptyMessage()}
+              />
+              <Pagination
+                page={pagination.page}
+                pages={pagination.pages}
+                onPageChange={(page) => dispatch(setPage(page))}
               />
             </section>
           )}
@@ -167,6 +220,8 @@ function App() {
       {isFormOpen && (
         <LeadForm key={editingLead ? editingLead.id : 'new'} lead={editingLead} onSave={saveLead} onCancel={closeForm} />
       )}
+
+      {viewingLeadId !== null && <LeadDetails leadId={viewingLeadId} onClose={() => setViewingLeadId(null)} />}
     </div>
   )
 }
